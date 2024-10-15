@@ -1,0 +1,97 @@
+---
+title: "Proyecto_Simu"
+output: html_document
+date: "2024-10-05"
+---
+```{r, message=FALSE,  warning=FALSE}
+if(!require(dplyr)){install.packages('dplyr')}
+library(dplyr)
+if(!require(readxl)){install.packages("readxl")}
+library(readxl)
+if(!require(lubridate)){install.packages('lubridate')}
+library(lubridate)
+
+```
+
+
+## Ordenamos la variable "Date Time Stamp"
+
+```{r}
+# Ordenar los datos por la columna 'Date Time Stamp' de forma creciente
+Datos_ordenados <- Datos %>%
+  arrange(`Date Time Stamp`)
+# Ver los primeros registros del dataframe ordenado
+head(Datos_ordenados)
+View(Datos_ordenados)
+```
+## Limpieza de datos:
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Análisis del comportamiento de los tiempos de llegadas 
+```{r}
+install.packages("ggplot2")
+library(ggplot2)
+# Extraer el día y la hora
+Datos$dia <- format(Datos$`Date Time Stamp`, "%d")  # Extraer el día del mes
+Datos$hora <- format(Datos$`Date Time Stamp`, "%H")  # Extraer la hora
+
+# Convertir la columna de horas a numérica
+Datos$hora <- as.numeric(Datos$hora)
+# Crear el histograma por días
+ggplot(Datos, aes(x = hora)) +
+  geom_histogram(binwidth = 1, fill = "lightblue", color = "black") +  # Histograma de horas
+  facet_wrap(~ dia, ncol = 4) +  # Dividir por día, 4 histogramas por fila
+  labs(title = "Distribución de llamadas por hora en los 22 días",
+       x = "Hora del día",
+       y = "Número de llamadas") +
+  theme_minimal()
+
+```
+Hemos observado que los tiempos de llegada de las llamadas presentan un comportamiento que varía según la segmentación de las horas de trabajo a lo largo del día. Esto sugiere que existen patrones específicos de comportamiento vinculados a los turnos laborales dentro de la empresa.
+
+
+### ANÁLISIS DIA 1
+
+```{r}
+Datos$hora <- format(Datos$`Date Time Stamp`, "%H")
+# Contar la frecuencia de llamadas por cada hora
+frecuencia_por_hora <- Datos %>%
+  group_by(hora) %>%
+  summarise(frecuencia = n())
+
+# Mostrar los resultados
+print(frecuencia_por_hora)
+
+install.packages("ggplot2")
+library(ggplot2)
+
+# Graficar la frecuencia de llamadas por hora
+ggplot(frecuencia_por_hora, aes(x = hora, y = frecuencia)) +
+  geom_bar(stat = "identity", fill = "lightblue", color = "black") +
+  labs(title = "Frecuencia de llamadas por hora",
+       x = "Hora del día",
+       y = "Número de llamadas") +
+  theme_minimal()
+
+```
+
+
