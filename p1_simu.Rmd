@@ -26,72 +26,91 @@ View(Datos_ordenados)
 ```
 ## Limpieza de datos:
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-## Análisis del comportamiento de los tiempos de llegadas 
-```{r}
-install.packages("ggplot2")
-library(ggplot2)
-# Extraer el día y la hora
-Datos$dia <- format(Datos$`Date Time Stamp`, "%d")  # Extraer el día del mes
-Datos$hora <- format(Datos$`Date Time Stamp`, "%H")  # Extraer la hora
-
-# Convertir la columna de horas a numérica
-Datos$hora <- as.numeric(Datos$hora)
-# Crear el histograma por días
-ggplot(Datos, aes(x = hora)) +
-  geom_histogram(binwidth = 1, fill = "lightblue", color = "black") +  # Histograma de horas
-  facet_wrap(~ dia, ncol = 4) +  # Dividir por día, 4 histogramas por fila
-  labs(title = "Distribución de llamadas por hora en los 22 días",
-       x = "Hora del día",
-       y = "Número de llamadas") +
-  theme_minimal()
-
-```
-Hemos observado que los tiempos de llegada de las llamadas presentan un comportamiento que varía según la segmentación de las horas de trabajo a lo largo del día. Esto sugiere que existen patrones específicos de comportamiento vinculados a los turnos laborales dentro de la empresa.
-
-
-### ANÁLISIS DIA 1
+- Revisión de la cantidad de NA's  en las variables:
 
 ```{r}
-Datos$hora <- format(Datos$`Date Time Stamp`, "%H")
-# Contar la frecuencia de llamadas por cada hora
-frecuencia_por_hora <- Datos %>%
-  group_by(hora) %>%
-  summarise(frecuencia = n())
+na_counts <- sapply(Datos_ordenados, function(x) sum(is.na(x)))
+na_counts
+```
+Tenemos 539 NA en Duratiom
 
-# Mostrar los resultados
-print(frecuencia_por_hora)
+## Cambio del nombre de las variables:
+```{r}
+library(dplyr)
 
-install.packages("ggplot2")
-library(ggplot2)
+# Renombrar las variables
+Datos_ordenados <- Datos_ordenados %>%
+  rename(
+    Fecha = fecha,
+    Inicio_Llamada = `Date Time Stamp`,  # Usar comillas para nombres con espacios
+    Duracion = Duratiom,  # Corrige el nombre
+    CallCenter = CallCenter,
+    Client_Categoria = Client_Cat,
+    Legalizacion_Adicional = LegalizacionAdicional,
+    Sesiones_Reservadas = `Sesiones Reservadas`,  # Usar comillas para nombres con espacios
+    Inicio_Reserva = `Inicio de Reserva`  # Usar comillas para nombres con espacios
+  )
 
-# Graficar la frecuencia de llamadas por hora
-ggplot(frecuencia_por_hora, aes(x = hora, y = frecuencia)) +
-  geom_bar(stat = "identity", fill = "lightblue", color = "black") +
-  labs(title = "Frecuencia de llamadas por hora",
-       x = "Hora del día",
-       y = "Número de llamadas") +
-  theme_minimal()
+print(colnames(Datos_ordenados))
+```
+## 1) Eliminar los NA's de la variable "
+```{r}
+library(dplyr)
+
+Datos_ordenados <- Datos_ordenados %>%
+  filter(!is.na(Duracion))
+
+#Verificación de eliminación de NA's
+na_counts <- sapply(Datos_ordenados, function(x) sum(is.na(x)))
+na_counts
+```
+## 2) Eliminar aquellas observaciones donde el Inicio_llamada sea mayor que Inicio_Reserva:
+
+```{r}
+library(dplyr)
+
+# Filtrar y eliminar las filas donde Inicio_llamada > Inicio_Reserva
+Datos_ordenados <- Datos_ordenados %>%
+  filter(Inicio_Llamada <= Inicio_Reserva)
+print(Datos_ordenados)
 
 ```
+
+# Contar observaciones donde Inicio_Reserva < Inicio_llamada
+```{r}
+library(dplyr)
+conteo <- Datos_ordenados %>%
+  filter(Inicio_Reserva < Inicio_Llamada) %>%
+  summarise(Numero_Observaciones = n())
+
+print(conteo)
+
+```
+## 3) Filtrado de valores fuera de la restricciones establecidas para la variable "Duracion":
+
+```{r}
+#library(dplyr)
+#Datos_ordenados <- Datos_ordenados %>%
+# filter(Duracion >= 30 & Duracion <= 300)
+
+```
+
+## Revisamos la frecuencia de valores de la variable *Duracion*:
+```{r}
+library(dplyr)
+
+# Definir los intervalos (bins) para Duracion
+intervalos <- seq(0, ceiling(max(Datos_ordenados$Duracion, na.rm = TRUE) / 10) * 10, by = 10)
+
+# Crear la tabla de frecuencias
+tabla_frecuencias <- Datos_ordenados %>%
+  mutate(Rango = cut(Duracion, breaks = intervalos, right = FALSE)) %>%  # Agrupar en intervalos
+  count(Rango)  # Contar las frecuencias
+
+# Imprimir la tabla de frecuencias
+print(tabla_frecuencias)
+
+```
+
 
 
