@@ -1,0 +1,1491 @@
+---
+title: "Proyecto_Simu"
+output: html_document
+date: "2024-10-05"
+---
+
+```{r}
+if(!require(dplyr)){install.packages('dplyr')}
+library(dplyr)
+if(!require(readxl)){install.packages("readxl")}
+library(readxl)
+if(!require(lubridate)){install.packages('lubridate')}
+library(lubridate)
+if(!require(ggplot2)){install.packages('ggplot2')}
+library(ggplot2)
+```
+
+```{r}
+Datos <- read_excel("Datos.xlsx")
+```
+
+## Ordenamos la variable "Date Time Stamp"
+
+```{r}
+# Ordenar los datos por la columna 'Date Time Stamp' de forma creciente
+Datos_ordenados <- Datos %>%
+  arrange(`Date Time Stamp`)
+# Ver los primeros registros del dataframe ordenado
+head(Datos_ordenados)
+
+```
+
+## 2) Cambio del nombre de las variables:
+```{r}
+library(dplyr)
+
+# Renombrar las variables
+Datos_ordenados <- Datos_ordenados %>%
+  rename(
+    Fecha = fecha,
+    Inicio_Llamada = `Date Time Stamp`,  # Usar comillas para nombres con espacios
+    Duracion = Duratiom,  # Corrige el nombre
+    CallCenter = CallCenter,
+    Client_Categoria = Client_Cat,
+    Legalizacion_Adicional = LegalizacionAdicional,
+    Sesiones_Reservadas = `Sesiones Reservadas`,  # Usar comillas para nombres con espacios
+    Inicio_Reserva = `Inicio de Reserva`  # Usar comillas para nombres con espacios
+  )
+
+print(colnames(Datos_ordenados))
+```
+
+## Limpieza de datos:
+
+### 1) Eliminar los NA's de las variable "
+
+- Revisión de la cantidad de NA's  en las variables:
+
+```{r}
+na_counts <- sapply(Datos_ordenados, function(x) sum(is.na(x)))
+na_counts
+```
+Tenemos 539 NA en Duratiom
+
+--    Eliminacion de Duracion
+```{r}
+library(dplyr)
+
+Datos_ordenados <- Datos_ordenados %>%
+  filter(!is.na(Duracion))
+
+#Verificación de eliminación de NA's
+na_counts <- sapply(Datos_ordenados, function(x) sum(is.na(x)))
+na_counts
+```
+
+### 3) Eliminar aquellas observaciones donde el Inicio_llamada sea mayor que Inicio_Reserva:
+
+```{r}
+library(dplyr)
+
+# Filtrar y eliminar las filas donde Inicio_llamada > Inicio_Reserva
+Datos_ordenados <- Datos_ordenados %>%
+  filter(Inicio_Llamada < Inicio_Reserva)
+print(Datos_ordenados)
+
+```
+
+- Verificación de la eliminación de irregularidades en el registro de datos de la variable Inicio_Reserva e Inicio_Llamada
+```{r}
+library(dplyr)
+conteo <- Datos_ordenados %>%
+  filter(Inicio_Reserva < Inicio_Llamada) %>%
+  summarise(Numero_Observaciones = n())
+
+print(conteo)
+```
+## 4) Filtrado de valores fuera de la restricciones establecidas para la variable "Duracion":
+
+###Eliminación de valor menores o iguales a 10:
+```{r}
+Datos_ordenados <- Datos_ordenados %>%
+  filter(Duracion > 10)
+```
+
+```{r}
+percentil_5 <- quantile(Datos_ordenados$Duracion, probs = 0.05, na.rm = TRUE)
+
+# Mostrar el resultado
+print(percentil_5)
+```
+Trabajaremos con el umbral del percentil del 5%
+
+###Eliminación de valor menores o iguales a 100:
+```{r}
+Datos_ordenados <- Datos_ordenados %>%
+  filter(Duracion > 100)
+```
+
+
+###ANÁLISIS DE LOS VALORES MÁXIMOS EN LA VARIABLE DURACIÓN:
+
+###Outliers -PRIMER MOMENTO:
+
+###ANÁLISIS GRÁFICO:
+
+```{r}
+A <- boxplot.stats(Datos_ordenados$Duracion)
+
+Outliers_1 <- A$out
+
+Outliers_1 <- data.frame(Duracion = Outliers_1)
+
+print(Outliers_1)
+summary(Outliers_1)
+```
+###Outliers -SEGUNDO MOMENTO:
+
+```{r}
+B <- boxplot.stats(Outliers_1$Duracion)
+
+Outliers_2 <- B$out
+
+Outliers_2 <- data.frame(Duracion = Outliers_2)
+
+print(Outliers_2)
+summary(Outliers_2)
+
+```
+
+### valor maximo a  horas
+```{r}
+3541/60
+```
+
+###Eiminacion de valores superiores a 3541:
+Este valor definido representa el valor mínimo de los outliers presentes en la exploración de los datos de la variable duración en un segundo momento de análisis. Este valor tomará los valores menores a 3540 segundos que equivalen a 59 minutos. 
+```{r}
+Datos_ordenados <- Datos_ordenados %>%
+  filter(Duracion < 3541)
+```
+
+
+
+#### Eliminar las columnas 'hora' y 'dia'
+```{r}
+Datos_ordenados$hora <- NULL
+Datos_ordenados$dia <- NULL
+Datos_ordenados$Fecha<-NULL
+
+# Mostrar las primeras filas del dataframe actualizado
+head(Datos_ordenados)
+
+```
+
+### SEPARACIÓN DE LA VARIABLE INICIO_LLAMADA:
+```{r}
+library(dplyr)
+# Crear la nueva columna 'Hora_llamada' extrayendo la hora completa (HH:MM:SS)
+Datos_ordenados <- Datos_ordenados %>%
+  mutate(Hora_llamada = format(Inicio_Llamada, "%H:%M:%S"),
+         Fecha_llamada = format(Inicio_Reserva, "%Y-%m-%d"))
+# Crear la nueva columna 'Hora_llamada' extrayendo la hora completa (HH:MM:SS)
+Datos_ordenados <- Datos_ordenados %>%
+  mutate(Hora_Reserva = format(Inicio_Reserva, "%H:%M:%S"),  
+         Fecha_Reserva = format(Inicio_Reserva, "%Y-%m-%d"))
+
+print(Datos_ordenados)
+```
+
+### CREACION DE VARIABLES NUMERICAS: HORA LLAMADA Y HORA RESERVA en HORAS
+```{r}
+library(dplyr)
+#Hora_llamada
+Datos_ordenados <- Datos_ordenados %>%
+  mutate(llamada_horas = as.numeric(substr(Hora_llamada, 1, 2)) + 
+                         as.numeric(substr(Hora_llamada, 4, 5)) / 60 + 
+                         as.numeric(substr(Hora_llamada, 7, 8)) / 3600)
+
+Datos_ordenados <- Datos_ordenados %>%
+  mutate(llamada_minutos = as.numeric(substr(Hora_llamada, 1, 2)) * 60 +   
+                            as.numeric(substr(Hora_llamada, 4, 5)) +      
+                            as.numeric(substr(Hora_llamada, 7, 8)) / 60) 
+
+Datos_ordenados <- Datos_ordenados %>%
+  mutate(llamada_segundos = as.numeric(substr(Hora_llamada, 1, 2)) * 3600 + 
+                            as.numeric(substr(Hora_llamada, 4, 5)) * 60 +
+                            as.numeric(substr(Hora_llamada, 7, 8))           
+  )
+
+
+
+# Reserva_horas
+Datos_ordenados <- Datos_ordenados %>%
+  mutate(reserva_horas = as.numeric(substr(Hora_Reserva, 1, 2)) + 
+                         as.numeric(substr(Hora_Reserva, 4, 5)) / 60 + 
+                         as.numeric(substr(Hora_Reserva, 7, 8)) / 3600)
+
+Datos_ordenados <- Datos_ordenados %>%
+  mutate(reserva_minutos = as.numeric(substr(Hora_Reserva, 1, 2)) * 60 +   
+                            as.numeric(substr(Hora_Reserva, 4, 5)) +      
+                            as.numeric(substr(Hora_Reserva, 7, 8)) / 60) 
+Datos_ordenados <- Datos_ordenados %>%
+  mutate(reserva_segundos = as.numeric(substr(Hora_Reserva, 1, 2)) * 3600 + 
+                            as.numeric(substr(Hora_Reserva, 4, 5)) * 60 +
+                            as.numeric(substr(Hora_Reserva, 7, 8))           
+  )
+
+
+```
+
+# Análisis Duplicado de Inicio_llamada
+```{r}
+duplicados <- Datos_ordenados %>%
+  group_by(Hora_llamada) %>%
+  filter(n() > 1)
+
+print(duplicados)
+
+```
+
+### CREACIÓN DE LA VARIABLE Tiempo_entre_llegadas
+
+```{r}
+# Calcular el tiempo entre llegadas
+# diff() calculará las diferencias entre tiempos sucesivos
+Tiempo_entre_llegadas <- c(0, as.numeric(difftime(Datos_ordenados$Inicio_Llamada[-1], 
+                                                     Datos_ordenados$Inicio_Llamada[-nrow(Datos_ordenados)], 
+                                                     units = "secs")))
+
+# Agregar el tiempo entre llegadas al dataframe
+Datos_ordenados$Tiempo_entre_llegadas <- Tiempo_entre_llegadas
+```
+
+
+### Creación de la variable Fin_llamada_segundos en segundos:
+
+```{r}
+library(dplyr)
+Datos_ordenados <- Datos_ordenados %>%
+  mutate(Fin_llamada_segundos=llamada_segundos+Duracion)
+
+```
+
+### Fin_llamada-formato tiempo:
+```{r}
+Datos_ordenados <- Datos_ordenados %>%
+  mutate(Fin_Llamada = as.POSIXct(Inicio_Llamada) + Duracion) %>%
+  mutate(Fin_Llamada = format(Fin_Llamada, "%Y-%m-%d %H:%M:%S"))
+```
+
+### Creación de la variable Tiempo_entre_reservas:
+```{r}
+# Asegúrate de que las fechas estén en formato POSIXct
+Datos_ordenados$Inicio_Llamada <- as.POSIXct(Datos_ordenados$Inicio_Llamada, format = "%Y-%m-%d %H:%M:%S")
+Datos_ordenados$Inicio_Reserva <- as.POSIXct(Datos_ordenados$Inicio_Reserva, format = "%Y-%m-%d %H:%M:%S")
+
+# 1. Calcular el tiempo entre reservas en horas
+Datos_ordenados$Tiempo_entre_reservas_horas <- as.numeric(difftime(Datos_ordenados$Inicio_Reserva, Datos_ordenados$Inicio_Llamada, units = "hours"))
+
+# 2. Convertir el tiempo entre reservas a segundos (convertido a entero para sprintf)
+Datos_ordenados$Tiempo_entre_reservas_segundos <- as.integer(Datos_ordenados$Tiempo_entre_reservas_horas * 3600)
+# Asegúrate de que las fechas estén en formato POSIXct
+Datos_ordenados$Inicio_Llamada <- as.POSIXct(Datos_ordenados$Inicio_Llamada, format = "%Y-%m-%d %H:%M:%S")
+Datos_ordenados$Inicio_Reserva <- as.POSIXct(Datos_ordenados$Inicio_Reserva, format = "%Y-%m-%d %H:%M:%S")
+
+Datos_ordenados$Tiempo_entre_reservas_hh_mm_ss <- sprintf("%02d:%02d:%02d", 
+                                                 Datos_ordenados$Tiempo_entre_reservas_segundos %/% 3600,  # Horas
+                                                 (Datos_ordenados$Tiempo_entre_reservas_segundos %% 3600) %/% 60,  # Minutos
+                                                 Datos_ordenados$Tiempo_entre_reservas_segundos %% 60)  # Segundos
+
+
+# Calcular el tiempo entre reservas
+tiempo_entre_reservas <- difftime(Datos_ordenados$Inicio_Reserva, Datos_ordenados$Inicio_Llamada)
+
+# Extraer días, horas, minutos y segundos
+días <- as.numeric(tiempo_entre_reservas, units = "days")
+horas <- as.numeric(tiempo_entre_reservas, units = "hours") %% 24
+minutos <- as.numeric(tiempo_entre_reservas, units = "mins") %% 60
+segundos <- as.numeric(tiempo_entre_reservas, units = "secs") %% 60
+
+# Crear una cadena de texto para la diferencia
+Datos_ordenados$Tiempo_entre_reservas_texto <- paste0(floor(días), " días, ", 
+                                                        floor(horas), " horas, ", 
+                                                        floor(minutos), " minutos, ", 
+                                                        floor(segundos), " segundos")
+
+
+```
+###Eliminacion de Tiempo _entre_reservas negativo o menores a una 12 horas:
+
+```{r}
+library(dplyr)
+
+# Filtramos y mostramos las filas con valores negativos
+valores_negativos <- Datos_ordenados %>% filter(Tiempo_entre_reservas_segundos< 12*3600)
+
+# Mostramos los resultados
+valores_negativos
+
+```
+
+### Creación de la variable Tiempo
+```{r}
+# Supongamos que la columna que contiene las horas es llamada_horas
+Datos_ordenados$Tiempo <- floor(Datos_ordenados$llamada_horas) + 1
+
+# Asegurarte de que los valores están dentro del rango de 1 a 24
+Datos_ordenados$Tiempo[Datos_ordenados$Tiempo > 24] <- 24
+
+```
+
+
+#Ordenar variables: 
+```{r}
+# Verifica si existen todas las columnas en tu dataframe
+nuevo_orden <- c(
+    'Fecha_llamada', 
+    'Tiempo',
+    'Inicio_Llamada',
+    'Tiempo_entre_llegadas',
+    'Hora_llamada',
+    'Duracion', 
+    'CallCenter',
+    'Inicio_Reserva',
+    'Hora_Reserva',
+    'Fecha_Reserva',   
+    'Fin_llamada_segundos', 
+    'Fin_Llamada', 
+    'Client_Categoria', 
+    'Legalizacion_Adicional', 
+    'Sesiones_Reservadas',
+    'llamada_horas' ,       
+    'llamada_minutos', 
+    'llamada_segundos',     
+    'reserva_horas',
+    'reserva_minutos',
+    'reserva_segundos',
+    'Tiempo_entre_reservas_segundos',
+    'Tiempo_entre_reservas_horas',
+    'Tiempo_entre_reservas_texto',
+    'Tiempo_entre_reservas_hh_mm_ss'
+    
+  )
+```
+
+*ANÁLISIS DE REGRESIÓN:TIEMPO ENTRE LLEGADAS CON X'S*
+
+```{r}
+colnames(Datos_ordenados)
+```
+
+```{r}
+# Asegúrate de que las variables categóricas sean factores
+Datos_ordenados$CallCenter <- as.factor(Datos_ordenados$CallCenter)
+Datos_ordenados$Legalizacion_Adicional <- as.factor(Datos_ordenados$Legalizacion_Adicional)
+Datos_ordenados$Client_Categoria <- as.factor(Datos_ordenados$Client_Categoria)
+# Ajustar el modelo de regresión múltiple
+modelo <- lm(Tiempo_entre_llegadas ~ Inicio_Llamada + CallCenter + Tiempo + Legalizacion_Adicional + Client_Categoria + Tiempo_entre_reservas_horas + Sesiones_Reservadas, data = Datos_ordenados)
+
+# Ver los resultados del modelo
+summary(modelo)
+```
+Observamos que la variable Inicio_llamada, CallCenter y el Tiempo  influyen en el Tiempo entre llegadas. 
+
+##Análisis Gráfico Tiempo entre llegadas vs X's:
+
+#Tiempo
+
+```{r}
+# Crear gráfico de regresión de Tiempo_entre_llegadas vs Tiempo
+ggplot(Datos_ordenados, aes(x = Tiempo_entre_llegadas, y = Tiempo)) +
+  geom_point() +  # Puntos de datos originales
+  geom_smooth(method = "lm", col = "blue") +  # Línea de regresión ajustada
+  labs(title = "Relación entre Tiempo_entre_llegadas y Tiempo",
+       x = "Tiempo (Horas)",
+       y = "Tiempo entre Llegadas") +
+  theme_minimal()
+
+```
+
+Mientras aumenta las horas el tiempo entre llamadas también. 
+
+#Call center 
+
+```{r}
+# Cargar la librería ggplot2
+library(ggplot2)
+
+# Crear el boxplot
+ggplot(Datos_ordenados, aes(x = CallCenter, y = llamada_horas, fill = CallCenter)) +
+  geom_boxplot() +
+  labs(title = "Distribución de Tiempo de Llegadas por Call Center",
+       x = "Call Center",
+       y = "Hora de llamada") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+
+```
+Cada centro de llamadas tiene características distintas en cuanto a los tiempos de llegada de las llamadas:
+
+Call Center A tiene una distribución intermedia con algunos outliers de llamadas muy tempranas.
+Call Center B tiene la menor variabilidad, con la mayoría de las llamadas concentradas en la mañana.
+Call Center C tiene una distribución más dispersa y las llamadas ocurren a lo largo de un rango de tiempo más amplio, sin valores atípicos visibles.
+
+```{r}
+# Cargar la librería ggplot2
+library(ggplot2)
+
+# Crear el boxplot
+ggplot(Datos_ordenados, aes(x = CallCenter, y = Tiempo_entre_llegadas, fill = CallCenter)) +
+  geom_boxplot() +
+  labs(title = "Distribución de Tiempo entre Llegadas por Call Center",
+       x = "Call Center",
+       y = "Tiempo entre Llegadas") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+```
+Los tres centros tienen comportamientos similares en términos de tiempos entre llegadas de llamadas, con la mayoría de las llamadas ocurriendo en intervalos muy cortos de tiempo. Sin embargo, existen tiempos de inactividad largos en todos los centros, con el Call Center A mostrando los tiempos entre llegadas más extremos. Estos outliers pueden reflejar periodos de baja actividad o problemas operativos que resultaron en largas esperas entre llamadas.
+
+```{r}
+#install.packages("dplyr")
+#install.packages("plotly")
+#install.packages("lubridate")
+
+library(dplyr)
+library(plotly)
+library(lubridate)
+
+# Asegúrate de que Inicio_Llamada está en formato POSIXct
+Datos_ordenados$Inicio_Llamada <- as.POSIXct(Datos_ordenados$Inicio_Llamada)
+
+# Extraer la hora de la variable Inicio_Llamada
+Datos_ordenados$Hora <- hour(Datos_ordenados$Inicio_Llamada)
+
+# Contar las llegadas por hora para cada CallCenter
+conteo_llegadas <- Datos_ordenados %>%
+  group_by(Hora, CallCenter) %>%
+  summarise(Frecuencia = n(), .groups = "drop")
+
+# Crear un gráfico de líneas interactivo con Plotly
+p <- conteo_llegadas %>%
+  plot_ly(x = ~Hora, y = ~Frecuencia, color = ~CallCenter, type = 'scatter', mode = 'lines+markers') %>%
+  layout(title = "Proceso de Llegadas por hora y Call Center",
+         xaxis = list(title = "Hora"),
+         yaxis = list(title = "Frecuencia"),
+         legend = list(title = list(text = 'Call Center')))
+
+# Mostrar el gráfico
+p
+
+
+```
+
+
+# SEGEMENTACIÓN DE LA VARIABLE TIEMPO POR SUS VARIABLES QUE INFLUYEN:
+
+## TIEMPO :
+
+*Call center A*
+
+01:00:00 am hasta las 4:59 am : *No hay recepción de llamadas*
+
+5am - 13:00 pm : hay crecimiento en las llamadas
+
+16:00 - 24:00 horas (8hrs):  hay decrecimiento en las llamadas
+
+*Call center B:*
+00:00 - 4:00 : hay decrecimiento en las llamadas
+
+05:00 - 10:00: en crecimiento la recepción de llamadas. 
+
+10:00 - 15:00 decrecimiento. 
+
+15-16:00 - 00:00 horas (8hrs):  hay crecimiento en las llamadas
+
+*Call center C:*
+00:00 - 4:00 : hay decrecimiento en las llamadas, posible reducción del personal 
+ 
+5:00 - 10:00: en crecimiento la recepción de llamadas. 
+
+10:00 - 15:00 decrecimiento
+
+14-17:00 - 00:00 horas (8hrs):  hay crecimiento en las llamadas.
+
+#EVALUANDO:
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(lubridate)
+library(plotly)
+
+# Función para calcular el promedio de agentes ocupados por Call Center y hora en un intervalo de fechas
+calcular_promedio_agentes_por_hora <- function(Datos_ordenados, Fecha_Inicio, Fecha_Fin) {
+  # Convertir Inicio_Llamada y Fin_Llamada a formato POSIXct
+  Datos_ordenados$Inicio_Llamada <- as.POSIXct(Datos_ordenados$Inicio_Llamada)
+  Datos_ordenados$Fin_Llamada <- as.POSIXct(Datos_ordenados$Fin_Llamada)
+  
+  # Filtrar los datos para el intervalo de fechas
+  datos_filtrados <- Datos_ordenados %>%
+    filter(as.Date(Inicio_Llamada) >= as.Date(Fecha_Inicio) & 
+           as.Date(Inicio_Llamada) <= as.Date(Fecha_Fin))
+  
+  # Crear un rango de horas para todo el intervalo de fechas
+  horas_dia <- seq(from = as.POSIXct(paste(Fecha_Inicio, "00:00:00")), 
+                   to = as.POSIXct(paste(Fecha_Fin, "23:59:59")), 
+                   by = "hour")
+
+  # Inicializar un dataframe para almacenar resultados
+  resultados <- data.frame(Hora = rep(horas_dia, each = length(unique(Datos_ordenados$CallCenter))),
+                           CallCenter = rep(unique(Datos_ordenados$CallCenter), times = length(horas_dia)),
+                           Agentes_Ocupados = 0)
+  
+  # Contar agentes ocupados por hora y Call Center
+  for (i in 1:nrow(resultados)) {
+    hora_actual <- resultados$Hora[i]
+    call_center_actual <- resultados$CallCenter[i]
+    
+    # Filtrar datos para la hora y Call Center actuales
+    agentes_ocupados <- datos_filtrados %>%
+      filter(CallCenter == call_center_actual,
+             Inicio_Llamada <= hora_actual,
+             Fin_Llamada > hora_actual) %>%
+      nrow()
+    
+    # Almacenar el conteo en el dataframe de resultados
+    resultados$Agentes_Ocupados[i] <- agentes_ocupados
+  }
+  
+  # Calcular el promedio de agentes ocupados por Call Center y Hora
+  promedio_agentes_por_hora <- resultados %>%
+    group_by(CallCenter, Hora) %>%
+    summarise(Promedio_Agentes_Ocupados = mean(Agentes_Ocupados))
+  
+  return(promedio_agentes_por_hora)
+}
+
+# Llamar a la función y obtener los resultados para un intervalo de fechas
+promedio_resultados_horas <- calcular_promedio_agentes_por_hora(Datos_ordenados, "2019-07-01", "2019-07-22")
+
+# Crear el gráfico de líneas por hora con ggplot2
+p <- ggplot(promedio_resultados_horas, aes(x = Hora, y = Promedio_Agentes_Ocupados, color = CallCenter, group = CallCenter)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Promedio de Agentes Ocupados por Hora y Call Center (Intervalo de Fechas)",
+       x = "Hora",
+       y = "Promedio de Agentes Ocupados") +
+  theme_minimal() +
+  scale_x_datetime(date_breaks = "2 hours", date_labels = "%H:%M")
+
+# Convertir el gráfico a interactivo con plotly
+ggplotly(p)
+
+```
+
+
+
+Observamos que el dia 22 tiene datos insuficientes por ello no lo consideraremos y además que a partir del día 9 el comportamiento de la cantidad de operardores por llamada disminuye notablemente, por ello fragmentaremos la data en 2.
+
+-Eliminacion de las llamadas del día 22 por insuficiencia de data.
+
+```{r}
+# Convertir 'Fecha_llamada' a formato Date (si está en formato texto)
+Datos_ordenados$Fecha_llamada <- as.Date(Datos_ordenados$Fecha_llamada, format = "%Y-%m-%d")
+# Eliminar las filas donde 'Fecha_llamada' es "2019-07-22"
+Datos_ordenados <- filter(Datos_ordenados, Fecha_llamada != "2019-07-22")
+
+```
+
+### Limpieza de Datos para el Call Center A:
+
+```{r}
+# Filtrar llamadas del Call Center "A" entre 1 a.m. y 5 a.m. usando llamada_horas
+llamadas_A_1_5am <- Datos_ordenados %>%
+  filter(CallCenter == "A" & (llamada_horas >= 1 & llamada_horas <= 5))
+
+# Contar la cantidad de llamadas en ese rango
+cantidad_llamadas_A_1_5am <- nrow(llamadas_A_1_5am)
+
+# Mostrar el resultado
+cantidad_llamadas_A_1_5am
+llamadas_A_1_5am <- Datos_ordenados %>%
+  filter(CallCenter == "A" & (llamada_horas >= 1 & llamada_horas <= 5))
+
+# Imprimir las llamadas filtradas
+print(llamadas_A_1_5am)
+
+
+```
+*Al observa esto concluimos que la pausa en el trabajo en el Call center A se da a partir de las 2 am hasta las 5:00 am*
+#Eliminacion de ceros
+```{r}
+# Filtrar los valores de Tiempo_entre_llegadas que son iguales a 0
+Datos_igual_a_cero <- Datos_ordenados %>% filter(Tiempo_entre_llegadas == 0)
+
+# Mostrar los datos filtrados
+print(Datos_igual_a_cero)
+
+# Eliminar las filas donde Tiempo_entre_llegadas es igual a 0
+Datos_ordenados <- Datos_ordenados %>% filter(Tiempo_entre_llegadas != 0)
+
+# Mostrar las primeras filas del dataframe actualizado
+Datos_1 <- Datos_ordenados %>% filter(Tiempo_entre_llegadas == 0)
+print(Datos_1)
+
+```
+
+### Filtramos las horas
+
+```{r}
+
+# Filtrar llamadas hasta la hora 1 (<= 1.00)
+A_Hora_1 <- filter(Datos_ordenados, as.numeric(Tiempo) <= as.numeric("1.00"))
+
+# Filtrar llamadas entre 1.00 y 2.00
+A_Hora_2 <- filter(Datos_ordenados, as.numeric(llamada_horas) > as.numeric("1.00") & as.numeric(llamada_horas) <= as.numeric("2.00"))
+
+# Filtrar llamadas entre 2.00 y 3.00
+A_Hora_3 <- filter(Datos_ordenados, as.numeric(llamada_horas) > as.numeric("2.00") & as.numeric(llamada_horas) <= as.numeric("3.00"))
+
+# Filtrar llamadas entre 3.00 y 4.00
+A_Hora_4 <- filter(Datos_ordenados, as.numeric(llamada_horas) > as.numeric("3.00") & as.numeric(llamada_horas) <= as.numeric("4.00"))
+
+# Filtrar llamadas entre 4.00 y 5.00
+A_Hora_5 <- filter(Datos_ordenados, as.numeric(llamada_horas) > as.numeric("4.00") & as.numeric(llamada_horas) <= as.numeric("5.00"))
+
+# Filtrar llamadas entre 5.00 y 6.00
+A_Hora_6 <- filter(Datos_ordenados, as.numeric(llamada_horas) > as.numeric("5.00") & as.numeric(llamada_horas) <= as.numeric("6.00"))
+
+# Filtrar llamadas entre 6.00 y 7.00
+A_Hora_7 <- filter(Datos_ordenados, as.numeric(llamada_horas) > as.numeric("6.00") & as.numeric(llamada_horas) <= as.numeric("7.00"))
+
+# Filtrar llamadas entre 7.00 y 8.00
+A_Hora_8 <- filter(Datos_ordenados, as.numeric(llamada_horas) > as.numeric("7.00") & as.numeric(llamada_horas) <= as.numeric("8.00"))
+
+# Filtrar llamadas entre 8.00 y 9.00
+A_Hora_9 <- filter(Datos_ordenados, as.numeric(llamada_horas) > as.numeric("8.00") & as.numeric(llamada_horas) <= as.numeric("9.00"))
+
+# Filtrar llamadas entre 9.00 y 10.00
+A_Hora_10 <- filter(Datos_ordenados, as.numeric(llamada_horas) > as.numeric("9.00") & as.numeric(llamada_horas) <= as.numeric("10.00"))
+
+# Filtrar llamadas entre 10.00 y 11.00
+A_Hora_11 <- filter(Datos_ordenados, as.numeric(llamada_horas) > as.numeric("10.00") & as.numeric(llamada_horas) <= as.numeric("11.00"))
+
+# Filtrar llamadas entre 11.00 y 12.00
+A_Hora_12 <- filter(Datos_ordenados, as.numeric(llamada_horas) > as.numeric("11.00") & as.numeric(llamada_horas) <= as.numeric("12.00"))
+
+# Filtrar llamadas entre 12.00 y 13.00
+A_Hora_13 <- filter(Datos_ordenados, as.numeric(llamada_horas) > as.numeric("12.00") & as.numeric(llamada_horas) <= as.numeric("13.00"))
+
+# Filtrar llamadas entre 13.00 y 14.00
+A_Hora_14 <- filter(Datos_ordenados, as.numeric(llamada_horas) > as.numeric("13.00") & as.numeric(llamada_horas) <= as.numeric("14.00"))
+
+# Filtrar llamadas entre 14.00 y 15.00
+A_Hora_15 <- filter(Datos_ordenados, as.numeric(llamada_horas) > as.numeric("14.00") & as.numeric(llamada_horas) <= as.numeric("15.00"))
+
+# Filtrar llamadas entre 15.00 y 16.00
+A_Hora_16 <- filter(Datos_ordenados, as.numeric(llamada_horas) > as.numeric("15.00") & as.numeric(llamada_horas) <= as.numeric("16.00"))
+
+# Filtrar llamadas entre 16.00 y 17.00
+A_Hora_17 <- filter(Datos_ordenados, as.numeric(llamada_horas) > as.numeric("16.00") & as.numeric(llamada_horas) <= as.numeric("17.00"))
+
+# Filtrar llamadas entre 17.00 y 18.00
+A_Hora_18 <- filter(Datos_ordenados, as.numeric(llamada_horas) > as.numeric("17.00") & as.numeric(llamada_horas) <= as.numeric("18.00"))
+
+# Filtrar llamadas entre 18.00 y 19.00
+A_Hora_19 <- filter(Datos_ordenados, as.numeric(llamada_horas) > as.numeric("18.00") & as.numeric(llamada_horas) <= as.numeric("19.00"))
+
+# Filtrar llamadas entre 19.00 y 20.00
+A_Hora_20 <- filter(Datos_ordenados, as.numeric(llamada_horas) > as.numeric("19.00") & as.numeric(llamada_horas) <= as.numeric("20.00"))
+
+# Filtrar llamadas entre 20.00 y 21.00
+A_Hora_21 <- filter(Datos_ordenados, as.numeric(llamada_horas) > as.numeric("20.00") & as.numeric(llamada_horas) <= as.numeric("21.00"))
+
+# Filtrar llamadas entre 21.00 y 22.00
+A_Hora_22 <- filter(Datos_ordenados, as.numeric(llamada_horas) > as.numeric("21.00") & as.numeric(llamada_horas) <= as.numeric("22.00"))
+
+# Filtrar llamadas entre 22.00 y 23.00
+A_Hora_23 <- filter(Datos_ordenados, as.numeric(llamada_horas) > as.numeric("22.00") & as.numeric(llamada_horas) <= as.numeric("23.00"))
+
+# Filtrar llamadas entre 23.00 y 24.00
+A_Hora_24 <- filter(Datos_ordenados, as.numeric(llamada_horas) > as.numeric("23.00") & as.numeric(llamada_horas) <= as.numeric("24.00"))
+
+```
+
+##AJSUTE DE DISTRIBUCIONES
+```{r}
+library(fitdistrplus)
+
+# Función para probar múltiples distribuciones y ver cuál pasa la prueba K-S
+probar_distribuciones <- function(datos, distribuciones) {
+  
+  # Lista para almacenar resultados de cada distribución
+  resultados_ks <- list()
+  
+  # Iterar sobre cada distribución
+  for (dist in distribuciones) {
+    # Intentar ajustar la distribución
+    ajuste <- try(fitdist(datos, dist), silent = TRUE)
+    
+    # Verificar si el ajuste fue exitoso
+    if (class(ajuste) != "try-error") {
+      # Calcular la prueba de bondad de ajuste
+      gof <- gofstat(ajuste)
+      
+      # Almacenar el valor de la prueba K-S
+      resultados_ks[[dist]] <- gof$kstest
+      
+      # Imprimir la prueba K-S
+      cat("Distribución:", dist, "- Prueba K-S:", gof$kstest, "\n")
+    } else {
+      cat("Distribución:", dist, "- Error al ajustar\n")
+    }
+  }
+  
+  # Retornar los resultados K-S de todas las distribuciones
+  return(resultados_ks)
+}
+
+# Lista de distribuciones que deseas probar, incluidas "lnorm", "beta", "unif", y "logis"
+distribuciones_a_probar <- c("gamma", "exp", "norm", "weibull", "lnorm", "beta", "unif", "logis")
+
+
+# Aplicar la función a A_Hora_1
+cat("Resultados para A_Hora_1\n")
+resultados_A_Hora_1 <- probar_distribuciones(A_Hora_1$Tiempo_entre_llegadas, distribuciones_a_probar)
+
+# Aplicar la función a A_Hora_2
+cat("\nResultados para A_Hora_2\n")
+resultados_A_Hora_2 <- probar_distribuciones(A_Hora_2$Tiempo_entre_llegadas, distribuciones_a_probar)
+# Aplicar la función a A_Hora_3
+cat("\nResultados para A_Hora_3\n")
+resultados_A_Hora_3 <- probar_distribuciones(A_Hora_3$Tiempo_entre_llegadas, distribuciones_a_probar)
+
+# Aplicar la función a A_Hora_4
+cat("\nResultados para A_Hora_4\n")
+resultados_A_Hora_4 <- probar_distribuciones(A_Hora_4$Tiempo_entre_llegadas, distribuciones_a_probar)
+
+# Aplicar la función a A_Hora_5
+cat("\nResultados para A_Hora_5\n")
+resultados_A_Hora_5 <- probar_distribuciones(A_Hora_5$Tiempo_entre_llegadas, distribuciones_a_probar)
+
+# Aplicar la función a A_Hora_6
+cat("\nResultados para A_Hora_6\n")
+resultados_A_Hora_6 <- probar_distribuciones(A_Hora_6$Tiempo_entre_llegadas, distribuciones_a_probar)
+
+# Aplicar la función a A_Hora_7
+cat("\nResultados para A_Hora_7\n")
+resultados_A_Hora_7 <- probar_distribuciones(A_Hora_7$Tiempo_entre_llegadas, distribuciones_a_probar)
+
+# Aplicar la función a A_Hora_8
+cat("\nResultados para A_Hora_8\n")
+resultados_A_Hora_8 <- probar_distribuciones(A_Hora_8$Tiempo_entre_llegadas, distribuciones_a_probar)
+
+# Aplicar la función a A_Hora_9
+cat("\nResultados para A_Hora_9\n")
+resultados_A_Hora_9 <- probar_distribuciones(A_Hora_9$Tiempo_entre_llegadas, distribuciones_a_probar)
+
+# Aplicar la función a A_Hora_10
+cat("\nResultados para A_Hora_10\n")
+resultados_A_Hora_10 <- probar_distribuciones(A_Hora_10$Tiempo_entre_llegadas, distribuciones_a_probar)
+
+# Aplicar la función a A_Hora_11
+cat("\nResultados para A_Hora_11\n")
+resultados_A_Hora_11 <- probar_distribuciones(A_Hora_11$Tiempo_entre_llegadas, distribuciones_a_probar)
+
+# Aplicar la función a A_Hora_12
+cat("\nResultados para A_Hora_12\n")
+resultados_A_Hora_12 <- probar_distribuciones(A_Hora_12$Tiempo_entre_llegadas, distribuciones_a_probar)
+
+# Aplicar la función a A_Hora_13
+cat("\nResultados para A_Hora_13\n")
+resultados_A_Hora_13 <- probar_distribuciones(A_Hora_13$Tiempo_entre_llegadas, distribuciones_a_probar)
+
+# Aplicar la función a A_Hora_14
+cat("\nResultados para A_Hora_14\n")
+resultados_A_Hora_14 <- probar_distribuciones(A_Hora_14$Tiempo_entre_llegadas, distribuciones_a_probar)
+
+# Aplicar la función a A_Hora_15
+cat("\nResultados para A_Hora_15\n")
+resultados_A_Hora_15 <- probar_distribuciones(A_Hora_15$Tiempo_entre_llegadas, distribuciones_a_probar)
+
+# Aplicar la función a A_Hora_16
+cat("\nResultados para A_Hora_16\n")
+resultados_A_Hora_16 <- probar_distribuciones(A_Hora_16$Tiempo_entre_llegadas, distribuciones_a_probar)
+
+# Aplicar la función a A_Hora_17
+cat("\nResultados para A_Hora_17\n")
+resultados_A_Hora_17 <- probar_distribuciones(A_Hora_17$Tiempo_entre_llegadas, distribuciones_a_probar)
+
+# Aplicar la función a A_Hora_18
+cat("\nResultados para A_Hora_18\n")
+resultados_A_Hora_18 <- probar_distribuciones(A_Hora_18$Tiempo_entre_llegadas, distribuciones_a_probar)
+
+# Aplicar la función a A_Hora_19
+cat("\nResultados para A_Hora_19\n")
+resultados_A_Hora_19 <- probar_distribuciones(A_Hora_19$Tiempo_entre_llegadas, distribuciones_a_probar)
+
+# Aplicar la función a A_Hora_20
+cat("\nResultados para A_Hora_20\n")
+resultados_A_Hora_20 <- probar_distribuciones(A_Hora_20$Tiempo_entre_llegadas, distribuciones_a_probar)
+
+# Aplicar la función a A_Hora_21
+cat("\nResultados para A_Hora_21\n")
+resultados_A_Hora_21 <- probar_distribuciones(A_Hora_21$Tiempo_entre_llegadas, distribuciones_a_probar)
+
+# Aplicar la función a A_Hora_22
+cat("\nResultados para A_Hora_22\n")
+resultados_A_Hora_22 <- probar_distribuciones(A_Hora_22$Tiempo_entre_llegadas, distribuciones_a_probar)
+
+# Aplicar la función a A_Hora_23
+cat("\nResultados para A_Hora_23\n")
+resultados_A_Hora_23 <- probar_distribuciones(A_Hora_23$Tiempo_entre_llegadas, distribuciones_a_probar)
+
+# Aplicar la función a A_Hora_24
+cat("\nResultados para A_Hora_24\n")
+resultados_A_Hora_24 <- probar_distribuciones(A_Hora_24$Tiempo_entre_llegadas, distribuciones_a_probar)
+
+```
+
+
+### Filtramos segun Tipo:
+
+```{r}
+# Filtrar los valores de Tiempo_entre_llegadas que son iguales a 0
+Datos_igual_a_cero <- Datos_ordenados %>% filter(Tiempo_entre_llegadas == 0)
+
+# Mostrar los datos filtrados
+print(Datos_igual_a_cero)
+
+# Eliminar las filas donde Tiempo_entre_llegadas es igual a 0
+Datos_ordenados <- Datos_ordenados %>% filter(Tiempo_entre_llegadas != 0)
+
+# Mostrar las primeras filas del dataframe actualizado
+Datos_1 <- Datos_ordenados %>% filter(Tiempo_entre_llegadas == 0)
+print(Datos_1)
+
+```
+#PARÁMETROS:
+
+```{r}
+fitdist(A_Hora_1$Tiempo_entre_llegadas,"exp")
+fitdist(A_Hora_2$Tiempo_entre_llegadas,"exp")
+fitdist(A_Hora_3$Tiempo_entre_llegadas,"lnorm")
+fitdist(A_Hora_4$Tiempo_entre_llegadas,"lnorm")
+fitdist(A_Hora_5$Tiempo_entre_llegadas,"lnorm")
+fitdist(A_Hora_6$Tiempo_entre_llegadas,"lnorm")
+fitdist(A_Hora_7$Tiempo_entre_llegadas,"lnorm")
+fitdist(A_Hora_8$Tiempo_entre_llegadas,"lnorm")
+fitdist(A_Hora_9$Tiempo_entre_llegadas,"lnorm")
+fitdist(A_Hora_10$Tiempo_entre_llegadas,"lnorm")
+fitdist(A_Hora_11$Tiempo_entre_llegadas,"lnorm")
+fitdist(A_Hora_12$Tiempo_entre_llegadas,"lnorm")
+fitdist(A_Hora_13$Tiempo_entre_llegadas,"lnorm")
+fitdist(A_Hora_14$Tiempo_entre_llegadas,"lnorm")
+fitdist(A_Hora_15$Tiempo_entre_llegadas,"lnorm")
+fitdist(A_Hora_16$Tiempo_entre_llegadas,"lnorm")
+fitdist(A_Hora_17$Tiempo_entre_llegadas,"lnorm")
+fitdist(A_Hora_18$Tiempo_entre_llegadas,"lnorm")
+fitdist(A_Hora_19$Tiempo_entre_llegadas,"lnorm")
+fitdist(A_Hora_20$Tiempo_entre_llegadas,"lnorm")
+fitdist(A_Hora_21$Tiempo_entre_llegadas,"exp")
+fitdist(A_Hora_22$Tiempo_entre_llegadas,"exp")
+fitdist(A_Hora_23$Tiempo_entre_llegadas,"exp")
+fitdist(A_Hora_24$Tiempo_entre_llegadas,"exp")
+```
+
+```{r}
+# Filtrar los valores de Tiempo_entre_llegadas que son iguales a 0
+Datos_igual_a_cero <- Datos_ordenados %>% filter(Tiempo_entre_llegadas == 0)
+
+# Mostrar los datos filtrados
+print(Datos_igual_a_cero)
+
+# Eliminar las filas donde Tiempo_entre_llegadas es igual a 0
+Datos_ordenados <- Datos_ordenados %>% filter(Tiempo_entre_llegadas != 0)
+
+# Mostrar las primeras filas del dataframe actualizado
+Datos_1 <- Datos_ordenados %>% filter(Tiempo_entre_llegadas == 0)
+print(Datos_1)
+```
+
+
+#ANÁLISIS DE LA VARIABLE DURACIÓN:
+
+##Verificamos si el tipo de CallCenter (CallCenter) influye sobre la duracion de las llamadas al CallCenter  (Duracion)
+
+```{r}
+# Verificamos si el tipo de CallCenter influye en la duración de las llamadas
+boxplot(Duracion ~ CallCenter, data = Datos_ordenados,
+        main = "Duración de llamadas por tipo de CallCenter",
+        xlab = "Tipo de CallCenter",
+        ylab = "Duración de las llamadas(segundos)",
+        col = rainbow(length(unique(Datos_ordenados$CallCenter))))
+
+```
+
+Observamos que los call center presentan diferencias entre sus medias, por ello haremos un análisis de regresión multiple para verificar si existe alguna relación entre la variable duración y las posibles variables de influencia. 
+
+```{r}
+colnames(Datos_ordenados)
+```
+
+*ANÁLISIS DE REGRESIÓN:DURACIÓN CON X'S*
+```{r}
+# Asegúrate de que las variables categóricas sean factores
+Datos_ordenados$CallCenter <- as.factor(Datos_ordenados$CallCenter)
+Datos_ordenados$Legalizacion_Adicional <- as.factor(Datos_ordenados$Legalizacion_Adicional)
+Datos_ordenados$Client_Categoria <- as.factor(Datos_ordenados$Client_Categoria)
+# Ajustar el modelo de regresión múltiple
+modelo <- lm(Duracion ~ Inicio_Llamada + CallCenter + Legalizacion_Adicional + Client_Categoria + Tiempo_entre_reservas_horas + Sesiones_Reservadas, data = Datos_ordenados)
+
+# Ver los resultados del modelo
+summary(modelo)
+```
+Tenemos que la variable Duración se ve influenciada según el Call center donde es atendido el usuario , el tipo de cliente y el momento en el que se realiza la llamada, ademas con una significancia del 0.05 se ve que Tiempo_entre_reservas_horas o mejor dicho el tiempo entre reservas influye en lo que tarda la llamada de un usuario. 
+
+```{r}
+library(ggplot2)
+# Gráfico de dispersión para Tiempo_entre_reservas_horas
+ggplot(Datos_ordenados, aes(x = Tiempo_entre_reservas_horas, y = Duracion)) +
+  geom_point() +
+  geom_smooth(method = "lm", col = "blue") +
+  labs(title = "Correlación entre Tiempo entre Reservas (horas) y Duración",
+       x = "Tiempo entre Reservas (horas)",
+       y = "Duración") +
+  theme_minimal()
+
+```
+#Duración VS Inicio_llamada:
+
+```{r}
+ggplot(Datos_ordenados, aes(x = Inicio_Llamada, y = Duracion)) +
+  geom_point() +
+  geom_smooth(method = "lm", col = "blue") +
+  labs(title = "Correlación entre el Inicio_llamada y Duración",
+       x = "Inicio_llamada",
+       y = "Duración") +
+  theme_minimal()
+
+```
+Observamos gráficamente que existe una correlación débil en cuanto al Inicio_llamada y la duración. 
+#Duración VS Call_center:
+
+```{r}
+# Gráfico de caja para CallCenter
+ggplot(Datos_ordenados, aes(x = CallCenter, y = Duracion)) +
+  geom_boxplot(fill = "lightblue") +
+  labs(title = "Duración de llamadas por Call Center",
+       x = "Call Center",
+       y = "Duración") +
+  theme_minimal()
+
+```
+Observamos que cada CallCenter presenta distintas medias en lo que respecta su duración en atención
+#Duración VS Cliente_Categoria:
+
+```{r}
+ggplot(Datos_ordenados, aes(x = Client_Categoria, y = Duracion)) +
+  geom_boxplot(fill = "lightblue") +
+  labs(title = "Duración de llamadas por Call Center",
+       x = "Categoría del cliente",
+       y = "Duración") +
+  theme_minimal()
+
+```
+
+Observamos diferencias en sus medias, por ello confirmamos graficamente que el tipo de cliente influye en la duración de las llamadas
+#Duración VS Sesiones Reservadas:
+```{r}
+# Gráfico de dispersión para Sesiones_Reservadas
+ggplot(Datos_ordenados, aes(x = Sesiones_Reservadas, y = Duracion)) +
+  geom_point() +
+  geom_smooth(method = "lm", col = "blue") +
+  labs(title = "Correlación entre Sesiones Reservadas y Duración",
+       x = "Sesiones Reservadas",
+       y = "Duración") +
+  theme_minimal()
+
+```
+```{r}
+# Gráfico de caja para Legalizacion_Adicional
+ggplot(Datos_ordenados, aes(x = Legalizacion_Adicional, y = Duracion)) +
+  geom_boxplot(fill = "lightgreen") +
+  labs(title = "Duración de llamadas por Legalización Adicional",
+       x = "Legalización Adicional",
+       y = "Duración") +
+  theme_minimal()
+
+```
+Como vemos las medias de duración que existen en aquellos clientes que desearon Legalización adicional es la misma entonces, ello demuestra quen la variable no es significativa, no importará mucho aquella segmentación de la duración en lo que respecta  a la legalización adicional
+
+# SEGEMENTACIÓN DE LA VARIABLE DURACIÓN POR SUS VARIABLES QUE INFLUYEN: TIPO DE CLIENTE Y CALL CENTER:
+
+## DURACIÓN SEGUN CALL CENTER:
+```{r}
+Datos_A <- filter(Datos_ordenados, CallCenter == "A")
+Datos_B <- filter(Datos_ordenados, CallCenter == "B")
+Datos_C <- filter(Datos_ordenados, CallCenter == "C")
+
+```
+## CALL CENTER VS CLIENTE_CATEGORÍA:
+```{r}
+
+Datos_A_Premium <- filter(Datos_A, Client_Categoria == "Premium")
+Datos_A_Regular <- filter(Datos_A, Client_Categoria == "Regular")
+
+Datos_B_Premium <- filter(Datos_B, Client_Categoria == "Premium")
+Datos_B_Regular <- filter(Datos_B, Client_Categoria == "Regular")
+
+Datos_C_Premium <- filter(Datos_C, Client_Categoria == "Premium")
+Datos_C_Regular <- filter(Datos_C, Client_Categoria == "Regular")
+
+```
+
+
+###GRÁFICO: DURACIÓN EN CALL CENTER A VS CLIENTE_CATEGORIA
+```{r}
+library(dplyr)
+library(ggplot2)
+
+# Contar la cantidad de clientes en cada categoría
+conteo_clientes <- Datos_A %>%
+  group_by(Client_Categoria) %>%
+  summarise(cantidad = n())
+
+# Crear un gráfico de barras
+ggplot(conteo_clientes, aes(x = Client_Categoria, y = cantidad, fill = Client_Categoria)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Cantidad de Clientes Premium y Regulares en Call Center A",
+       x = "Categoría de Cliente",
+       y = "Cantidad de Clientes") +
+  theme_minimal()
+
+```
+
+Tenemos que en el Call center A no hay clientes Premium sólo regulares
+
+###GRÁFICO: DURACIÓN EN CALL CENTER B VS CLIENTE_CATEGORIA
+```{r}
+library(dplyr)
+library(ggplot2)
+
+# Contar la cantidad de clientes en cada categoría
+conteo_clientes <- Datos_B %>%
+  group_by(Client_Categoria) %>%
+  summarise(cantidad = n())
+
+# Crear un gráfico de barras
+ggplot(conteo_clientes, aes(x = Client_Categoria, y = cantidad, fill = Client_Categoria)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Cantidad de Clientes Premium y Regulares en Call Center B",
+       x = "Categoría de Cliente",
+       y = "Cantidad de Clientes") +
+  theme_minimal()
+```
+Para el Call Center B si tenemos ambos tipos de clientes
+###GRÁFICO: DURACIÓN EN CALL CENTER C  VS CLIENTE_CATEGORIA
+```{r}
+library(dplyr)
+library(ggplot2)
+
+# Contar la cantidad de clientes en cada categoría
+conteo_clientes <- Datos_C %>%
+  group_by(Client_Categoria) %>%
+  summarise(cantidad = n())
+
+# Crear un gráfico de barras
+ggplot(conteo_clientes, aes(x = Client_Categoria, y = cantidad, fill = Client_Categoria)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Cantidad de Clientes Premium y Regulares en Call Center C",
+       x = "Categoría de Cliente",
+       y = "Cantidad de Clientes") +
+  theme_minimal()
+```
+Para el Call center C si tenemos los tipos de clientes.
+
+## DISTRIBUCIONES para cada tipo de call center segun categoria 
+
+### Call center A(Regular): DISTRIBUCIÓN GAMMA - APROBADA
+
+```{r}
+
+library(fitdistrplus)
+
+descdist(Datos_A_Regular$Duracion,boot = 1000)
+
+```
+
+### Call center B(Regular y Premium): DISTRIBUCIÓN GAMMA - APROBADA
+
+```{r}
+
+library(fitdistrplus)
+
+descdist(Datos_B_Regular$Duracion,boot = 1000)
+descdist(Datos_B_Premium$Duracion,boot = 1000)
+
+```
+### Call center C:
+REGULAR -----EXPONENCIAL - GAMMA - LOGNORMAL
+PREMIUM -----EXPONENCIAL-GAMMA-LOGNORMAL
+
+```{r}
+
+library(fitdistrplus)
+descdist(Datos_C_Regular$Duracion,boot = 100000)
+descdist(Datos_C_Premium$Duracion,boot = 100000)
+
+```
+
+##PREBAS DE BONDAD:
+
+## DISTRIBUCIONES para cada tipo de call center segun categoria 
+
+```{r}
+library(fitdistrplus)
+
+# Función para probar múltiples distribuciones y ver cuál pasa la prueba K-S
+probar_distribuciones <- function(datos, distribuciones) {
+  
+  # Lista para almacenar resultados de cada distribución
+  resultados_ks <- list()
+  
+  # Iterar sobre cada distribución
+  for (dist in distribuciones) {
+    # Intentar ajustar la distribución
+    ajuste <- try(fitdist(datos, dist), silent = TRUE)
+    
+    # Verificar si el ajuste fue exitoso
+    if (class(ajuste) != "try-error") {
+      # Calcular la prueba de bondad de ajuste
+      gof <- gofstat(ajuste)
+      
+      # Almacenar el valor de la prueba K-S
+      resultados_ks[[dist]] <- gof$kstest
+      
+      # Imprimir la prueba K-S
+      cat("Distribución:", dist, "- Prueba K-S:", gof$kstest, "\n")
+    } else {
+      cat("Distribución:", dist, "- Error al ajustar\n")
+    }
+  }
+  
+  # Retornar los resultados K-S de todas las distribuciones
+  return(resultados_ks)
+}
+
+# Lista de distribuciones que deseas probar, incluidas "lnorm", "beta", "unif", y "logis"
+distribuciones_a_probar <- c("gamma", "exp", "norm", "weibull", "lnorm", "beta", "unif", "logis")
+
+```
+
+### Call center A(Regular): DISTRIBUCIÓN GAMMA - APROBADA
+```{r}
+results<-probar_distribuciones(Datos_A_Regular$Duracion,distribuciones_a_probar)
+```
+
+### Parámetros:
+```{r}
+fitdist(Datos_A_Regular$Duracion,"gamma")
+```
+
+
+## Call center B(Regular y Premium): DISTRIBUCIÓN GAMMA - APROBADA
+
+```{r}
+results2R<-probar_distribuciones(Datos_B_Regular$Duracion,distribuciones_a_probar)
+results2R
+
+results2P<-probar_distribuciones(Datos_B_Premium$Duracion,distribuciones_a_probar)
+results2P
+```
+
+### Parámetros:
+
+```{r}
+fitdist(Datos_B_Premium$Duracion,"gamma")
+fitdist(Datos_B_Regular$Duracion,"gamma")
+
+```
+
+
+## Call center C:(Regular y Premium) LOGNORMAL
+
+```{r}
+results3R<-probar_distribuciones(Datos_C_Regular$Duracion,distribuciones_a_probar)
+results3R
+
+results3P<-probar_distribuciones(Datos_C_Premium$Duracion,distribuciones_a_probar)
+results3P
+```
+
+### Parámetros:
+```{r}
+fitdist(Datos_C_Premium$Duracion,"lnorm")
+fitdist(Datos_C_Regular$Duracion,"lnorm")
+
+```
+
+
+##Probamos aleatoriedad e independencia para cada tipo de call center segun categoria 
+
+####CALL CENTER A 
+```{r}
+plot(Datos_A_Regular$Duracion)
+plot(Datos_A_Regular$Duracion,type="l")
+acf(Datos_A_Regular$Duracion, lag.max=500)
+```
+```{r}
+5/100*500
+```
+
+Pasa la pruba de Autoindependencia la variable duración del Call Center A.
+
+#### CALL CENTER B
+```{r}
+plot(Datos_B_Regular$Duracion)
+plot(Datos_B_Regular$Duracion,type="l")
+plot(Datos_B_Premium$Duracion)
+plot(Datos_B_Premium$Duracion,type="l")
+acf(Datos_B_Regular$Duracion, lag.max=500)
+acf(Datos_B_Premium$Duracion, lag.max=500)
+
+```
+
+Pasa la pruba de Autoindependencia la variable duración del Call Center B.
+
+#### CALL CENTER c
+```{r}
+plot(Datos_C_Regular$Duracion)
+plot(Datos_C_Regular$Duracion,type="l")
+plot(Datos_C_Premium$Duracion)
+plot(Datos_C_Premium$Duracion,type="l")
+acf(Datos_C_Regular$Duracion, lag.max=500)
+acf(Datos_C_Premium$Duracion, lag.max=500)
+
+```
+
+
+
+
+# TIEMPO ENTRE RESERVAS:
+
+```{r}
+# Asegúrate de que las variables categóricas sean factores
+Datos_ordenados$CallCenter <- as.factor(Datos_ordenados$CallCenter)
+Datos_ordenados$Legalizacion_Adicional <- as.factor(Datos_ordenados$Legalizacion_Adicional)
+Datos_ordenados$Client_Categoria <- as.factor(Datos_ordenados$Client_Categoria)
+# Ajustar el modelo de regresión múltiple
+modelo <- lm(Tiempo_entre_reservas_segundos ~ llamada_segundos + CallCenter + Legalizacion_Adicional + Client_Categoria + Sesiones_Reservadas+Tiempo, data = Datos_ordenados)
+
+# Ver los resultados del modelo
+summary(modelo)
+```
+
+
+-- TIEMPO ENTRE RESERVAS - SEGÚN CLIENTE:
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+# Contar la cantidad de clientes en cada categoría
+conteo_clientes <- Datos_ordenados %>%
+  group_by(Client_Categoria) %>%
+  summarise(cantidad = n())
+
+# Crear un gráfico de barras
+ggplot(conteo_clientes, aes(x = Client_Categoria, y = cantidad, fill = Client_Categoria)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Cantidad de Clientes",
+       x = "Categoría de Cliente",
+       y = "Cantidad de Clientes") +
+  theme_minimal()
+
+```
+
+#### FILTRO:
+```{r}
+R_Premium <- filter(Datos_ordenados, Client_Categoria == "Premium")
+R_Regular <- filter(Datos_ordenados, Client_Categoria == "Regular")
+```
+
+
+####PRUEBAS DE BONDAD DE AJUSTE:
+
+```{r}
+
+library(fitdistrplus)
+
+descdist(R_Premium$Tiempo_entre_reservas_segundos,boot = 1000)
+descdist(R_Regular$Tiempo_entre_reservas_segundos,boot = 1000)
+
+```
+####PARÁMETROS:
+
+```{r}
+fitdist(R_Regular$Tiempo_entre_reservas_segundos,"norm")
+fitdist(R_Premium$Tiempo_entre_reservas_segundos,"norm")
+```
+
+#### AUTOINDEPENDCIA
+
+```{r}
+plot(R_Regular$Tiempo_entre_reservas_segundos)
+plot(R_Regular$Tiempo_entre_reservas_segundos,type="l")
+plot(R_Premium$Tiempo_entre_reservas_segundos)
+plot(R_Premium$Tiempo_entre_reservas_segundos,type="l")
+acf(R_Regular$Tiempo_entre_reservas_segundos, lag.max=500)
+acf(R_Regular$Tiempo_entre_reservas_segundos, lag.max=500)
+
+```
+
+## SIMULACIÓN
+
+
+```{r}
+set.seed(100)
+muestra_exploratoria <- list()
+funcion <- function(n) {
+  x <- numeric(n)
+  filas <- c(25, 16, 4, 4, 4, 4, 12, 12, 25, 25, 25, 25, 25, 14, 14, 14, 14, 14, 14, 16, 16, 16, 16, 16)
+  lista_matrices <- rep(lapply(filas, function(x) matrix(0, nrow = x, ncol = 2)), 90)
+  
+  tiempo_dia = 24*60*60
+
+  for (k in 1:n){
+    tiempo_actual = 0
+    pago = 0
+    margen_legalizacion = 0
+    total = 0
+    for (i in 1:30){
+      while (tiempo_actual < tiempo_dia*i){
+        
+        if (floor(tiempo_actual / 3600 - 24 * (i-1)) == 0){
+          t_entre_llegadas = rexp(1, 0.007271144)
+        }
+        else if (floor(tiempo_actual / 3600 - 24 * (i-1)) == 1){
+          t_entre_llegadas = rexp(1, 0.003245481)
+        }
+        else if (floor(tiempo_actual / 3600 - 24 * (i-1)) == 2){
+          t_entre_llegadas = rlnorm(1, 6.184635 ,1.323959)
+        }
+        else if (floor(tiempo_actual / 3600 - 24 * (i-1)) == 3){
+          t_entre_llegadas = rlnorm(1, 6.366925, 1.262065)
+        }
+        else if (floor(tiempo_actual / 3600 - 24 * (i-1)) == 4){
+          t_entre_llegadas = rlnorm(1, 7.117222, 1.028501)
+        }
+        else if (floor(tiempo_actual / 3600 - 24 * (i-1)) == 5){
+          t_entre_llegadas = rlnorm(1, 6.216678, 1.413586)
+        }
+        else if (floor(tiempo_actual / 3600 - 24 * (i-1)) == 6){
+          t_entre_llegadas = rlnorm(1, 5.444020, 1.254427)
+        }
+        else if (floor(tiempo_actual / 3600 - 24 * (i-1)) == 7){
+          t_entre_llegadas = rlnorm(1, 4.901116, 1.336553)
+        }
+        else if (floor(tiempo_actual / 3600 - 24 * (i-1)) == 8){
+          t_entre_llegadas = rlnorm(1, 4.364340, 1.388507)
+        }
+        else if (floor(tiempo_actual / 3600 - 24 * (i-1)) == 9){
+          t_entre_llegadas = rlnorm(1, 4.207120, 1.393607)
+        }
+        else if (floor(tiempo_actual / 3600 - 24 * (i-1)) == 10){
+          t_entre_llegadas = rlnorm(1, 4.071062, 1.317511)
+        }
+        else if (floor(tiempo_actual / 3600 - 24 * (i-1)) == 11){
+          t_entre_llegadas = rlnorm(1, 4.180761, 1.296465)
+        }
+        else if (floor(tiempo_actual / 3600 - 24 * (i-1)) == 12){
+          t_entre_llegadas = rlnorm(1, 3.939170, 1.409587)
+        }
+        else if (floor(tiempo_actual / 3600 - 24 * (i-1)) == 13){
+          t_entre_llegadas = rlnorm(1, 3.987363, 1.275575)
+        }
+        else if (floor(tiempo_actual / 3600 - 24 * (i-1)) == 14){
+          t_entre_llegadas = rlnorm(1, 4.223264, 1.466440)
+        }
+        else if (floor(tiempo_actual / 3600 - 24 * (i-1)) == 15){
+          t_entre_llegadas = rlnorm(1, 4.324837, 1.426868)
+        }
+        else if (floor(tiempo_actual / 3600 - 24 * (i-1)) == 16){
+          t_entre_llegadas = rlnorm(1, 3.995156, 1.452794)
+        }
+        else if (floor(tiempo_actual / 3600 - 24 * (i-1)) == 17){
+          t_entre_llegadas = rlnorm(1, 4.014553, 1.490007)
+        }
+        else if (floor(tiempo_actual / 3600 - 24 * (i-1)) == 18){
+          t_entre_llegadas = rlnorm(1, 4.169417, 1.390127)
+        }
+        else if (floor(tiempo_actual / 3600 - 24 * (i-1)) == 19){
+          t_entre_llegadas = rlnorm(1, 4.310478, 1.436766)
+        }
+        else if (floor(tiempo_actual / 3600 - 24 * (i-1)) == 20){
+          t_entre_llegadas = rexp(1, 0.00552084)
+        }
+        else if (floor(tiempo_actual / 3600 - 24 * (i-1)) == 21){
+          t_entre_llegadas = rexp(1, 0.004070888)
+        }
+        else if (floor(tiempo_actual / 3600 - 24 * (i-1)) == 22){
+          t_entre_llegadas = rexp(1, 0.005175744)
+        }
+        else if (floor(tiempo_actual / 3600 - 24 * (i-1)) == 23){
+          t_entre_llegadas = rexp(1, 0.00614815)
+        }
+        tipo_cliente = sample(c("Premium", "Regular"), 1, prob = c((table(Datos_ordenados$Client_Categoria)[[1]]/sum(table(Datos_ordenados$Client_Categoria))), (table(Datos_ordenados$Client_Categoria)[[2]]/sum(table(Datos_ordenados$Client_Categoria)))))
+        
+        tiempo_actual <- t_entre_llegadas + tiempo_actual
+        
+        if (tipo_cliente == "Premium"){
+          inicio_reserva = abs(rnorm(1, 1364242.7, 435245.6))
+        } else{
+          inicio_reserva = abs(rnorm(1, 2677081.2, 694442.4))
+        }
+        
+        sesiones_reservadas =  sample(c(1, 2, 3, 4, 5), 1 , prob=c((table(Datos_ordenados$Sesiones_Reservadas)[[1]]/sum(table(Datos_ordenados$Sesiones_Reservadas))) , (table(Datos_ordenados$Sesiones_Reservadas)[[2]]/sum(table(Datos_ordenados$Sesiones_Reservadas))), (table(Datos_ordenados$Sesiones_Reservadas)[[3]]/sum(table(Datos_ordenados$Sesiones_Reservadas))), (table(Datos_ordenados$Sesiones_Reservadas)[[4]]/sum(table(Datos_ordenados$Sesiones_Reservadas))), (table(Datos_ordenados$Sesiones_Reservadas)[[5]]/sum(table(Datos_ordenados$Sesiones_Reservadas)))))
+        
+        sesiones_reservadas = 1:sesiones_reservadas
+        
+        j = 1
+        ocupar_sesion = 0
+        while (length(sesiones_reservadas) > j){
+          
+          codificacion <- ifelse(sesiones_reservadas %% 2 == 0, 2, 1) # Si un número es impar es 1 y si es par es 2
+          
+          if (!is.na(which(lista_matrices[[floor(inicio_reserva / 3600)+1]][,codificacion[j]] == 0)[1])){
+              
+              espacio_disponible = which(lista_matrices[[floor(inicio_reserva / 3600)+1]][,codificacion[j]] == 0)[1]
+              lista_matrices[[floor(inicio_reserva / 3600)+1]][,codificacion[j]][espacio_disponible] <- 1 #SE TORNA OCUPADO
+              
+              ocupar_sesion = -25 + ocupar_sesion
+              
+              if (j == 1){
+                margen_legalizacion =  sample(c(0, 12), 1 , prob=c((table(Datos_ordenados$Legalizacion_Adicional)[[1]]/sum(table(Datos_ordenados$Legalizacion_Adicional))), (table(Datos_ordenados$Legalizacion_Adicional)[[2]]/sum(table(Datos_ordenados$Legalizacion_Adicional))))) + margen_legalizacion
+              }
+              
+              if (tipo_cliente == "Premium"){
+                pago = 180 + pago
+              } else{
+                pago = 110 + pago
+              }
+          }
+          else {
+            j = length(sesiones_reservadas)
+          }
+         j = j + 1 
+        }
+      }
+      print(i)
+      print("//////")
+    }
+    total = pago + ocupar_sesion + margen_legalizacion - length(unlist(lista_matrices)) * 60
+    x[k] <- total
+    print(k)
+    print(tiempo_actual)
+    print(".....")
+  }
+  return (list(lista_matrices, x))
+}
+replicas <- funcion(30)
+```
+
+
+```{r}
+(c(mean(replicas)-1.957*sd(replicas)/sqrt(length(replicas)),mean(replicas)+1.957*sd(replicas)/sqrt(length(replicas))))
+```
